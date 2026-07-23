@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Точка поэзии | премиальная платформа поэзии</title>
+  <link rel="icon" href="/assets/tochka-logo-clean-v3.png?v=20260722f" />
+  <link rel="stylesheet" href="/styles.css?v=20260722f" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" data-link aria-label="Точка поэзии, главная">
+      <span class="brand-mark"><img src="/assets/tochka-logo-clean-v3.png?v=20260722f" alt="" width="32" height="32" /></span>
+      <span>
+        <strong>Точка поэзии</strong>
+        <small>поэзия, авторство, редакция</small>
+      </span>
+    </a>
+    <nav class="main-nav" aria-label="Основная навигация">
+      <a href="/" data-link>Лента</a>
+      <a href="/sections" data-link>Разделы</a>
+      <a href="/authors" data-link>Авторы</a>
+      <a href="/news" data-link>Новости</a>
+      <a href="/login" data-link data-role="guest">Вход</a>
+      <a href="/register" data-link data-role="guest">Регистрация</a>
+      <a href="/profile" data-link data-role="registered">Профиль</a>
+      <a href="/publish" data-link>Публикация</a>
+      <a href="/private" data-link data-role="private">Закрытый круг</a>
+      <a href="/moderation" data-link data-role="staff">Модерация</a>
+      <a href="/admin" data-link data-role="staff">Админ</a>
+      <a href="/legal" data-link data-role="admin">РФ и защита</a>
+    </nav>
+    <label class="user-switcher">
+      <span>Роль</span>
+      <select id="userSelect" aria-label="Текущий пользователь"></select>
+    </label>
+  </header>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="site-footer">
+    <div class="footer-panel">
+      <div>
+        <strong>Точка поэзии</strong>
+        <span>сообщество, чтения и разговоры о стихах</span>
+      </div>
+      <nav aria-label="Социальные сети">
+        <a href="https://t.me/TochkaPoeta" target="_blank" rel="noopener noreferrer">Telegram канал</a>
+        <a href="https://t.me/tochkaPoeta_chat" target="_blank" rel="noopener noreferrer">Беседа</a>
+        <a href="https://www.tiktok.com/@tochkapoeta" target="_blank" rel="noopener noreferrer">TikTok</a>
+        <a href="mailto:tochkapoeta@ro.ru">tochkapoeta@ro.ru</a>
+      </nav>
+    </div>
+    <div class="footer-legal" aria-label="Юридическая информация">
+      <span>© 2026 Точка поэзии. Все права защищены.</span>
+      <a href="/privacy" data-link>Политика конфиденциальности</a>
+      <span aria-hidden="true">·</span>
+      <a href="/cookies" data-link>Политика cookies</a>
+      <span aria-hidden="true">·</span>
+      <a href="/offer" data-link>Оферта</a>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js?v=20260722f" defer></script>
+</body>
+</html>
