@@ -1,3 +1,0 @@
-# One IP per line. In production this file should be generated from a licensed
-# VPN/proxy intelligence provider and reviewed for false positives.
-203.0.113.9
