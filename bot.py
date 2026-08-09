@@ -3,6 +3,7 @@
 import asyncio
 from dataclasses import dataclass
 from functools import lru_cache
+import json
 import logging
 import os
 import re
@@ -33,6 +34,13 @@ MODERATION_THREAD_ID = os.getenv("MODERATION_THREAD_ID", "").strip()
 NEWS_URL = os.getenv("NEWS_URL", "").strip()
 BRAND_NAME = os.getenv("BRAND_NAME", "точка")
 BRAND_URL = os.getenv("BRAND_URL", "https://t.me/TochkaPoeta")
+ADMIN_IDS = {
+    int(admin_id)
+    for admin_id in os.getenv("ADMIN_IDS", "6100749072,1011945865").split(",")
+    if admin_id.strip().isdigit()
+}
+DATA_DIR = os.getenv("DATA_DIR", ".").strip() or "."
+SETTINGS_FILE = os.path.join(DATA_DIR, "bot_settings.json")
 
 DECORATION_LINE = "﹌" * 17
 TELEGRAM_URL_RE = re.compile(r"^(https?://)?(t\.me|telegram\.me)/[A-Za-z0-9_]{5,32}/?$")
@@ -75,12 +83,59 @@ def mk(*rows: list[InlineKeyboardButton]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[list(row) for row in rows])
 
 
+def load_settings() -> dict[str, bool]:
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as file:
+            settings = json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {"tournament_enabled": True}
+
+    return {"tournament_enabled": bool(settings.get("tournament_enabled", True))}
+
+
+def save_settings(settings: dict[str, bool]) -> None:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as file:
+        json.dump(settings, file, ensure_ascii=False, indent=2)
+
+
+def is_tournament_enabled() -> bool:
+    return load_settings()["tournament_enabled"]
+
+
+def set_tournament_enabled(enabled: bool) -> None:
+    save_settings({"tournament_enabled": enabled})
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in ADMIN_IDS
+
+
 def menu_markup() -> InlineKeyboardMarkup:
     rows = [
         [InlineKeyboardButton(text="Предложить стих", callback_data="suggest_poem")],
-        [InlineKeyboardButton(text="Подать заявку на Турнир", callback_data="apply_tournament")],
     ]
+    if is_tournament_enabled():
+        rows.append([InlineKeyboardButton(text="Подать заявку на Турнир", callback_data="apply_tournament")])
+    rows.append([InlineKeyboardButton(text="Новости", url=NEWS_URL or "https://www.tochkapoetry.ru/news")])
     return mk(*rows)
+
+
+def admin_markup() -> InlineKeyboardMarkup:
+    if is_tournament_enabled():
+        action_text = "Выключить турниры"
+        action_callback = "admin_tournament_off"
+        status = "Турниры включены"
+    else:
+        action_text = "Включить турниры"
+        action_callback = "admin_tournament_on"
+        status = "Турниры выключены"
+
+    return mk(
+        [InlineKeyboardButton(text=status, callback_data="admin_status")],
+        [InlineKeyboardButton(text=action_text, callback_data=action_callback)],
+        [InlineKeyboardButton(text="В главное меню", callback_data="main_menu")],
+    )
 
 
 def channel_prompt() -> InlineKeyboardMarkup:
@@ -130,6 +185,11 @@ def clean_text(value: object, fallback: str = "") -> str:
 
 def normalize_text_input(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
+
+
+def normalize_multiline_text(value: str) -> str:
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in value.replace("\r\n", "\n").split("\n")]
+    return "\n".join(lines).strip()
 
 
 def normalize_channel_link(value: str) -> str:
@@ -228,6 +288,71 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext) -> None
     await callback.answer()
 
 
+async def show_admin_panel(message: Message) -> None:
+    status = "включены" if is_tournament_enabled() else "выключены"
+    await message.answer(
+        f"Админка\n\nТурниры сейчас: <b>{status}</b>",
+        reply_markup=admin_markup(),
+    )
+
+
+@router.message(F.text == "/admin")
+async def admin_command(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    if not is_admin(message.from_user.id):
+        await message.answer("У вас нет доступа к админке.")
+        return
+
+    await show_admin_panel(message)
+
+
+@router.message(F.text == "/tournament_on")
+async def tournament_on_command(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    if not is_admin(message.from_user.id):
+        await message.answer("У вас нет доступа к админке.")
+        return
+
+    set_tournament_enabled(True)
+    await message.answer("Турниры включены.", reply_markup=admin_markup())
+
+
+@router.message(F.text == "/tournament_off")
+async def tournament_off_command(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    if not is_admin(message.from_user.id):
+        await message.answer("У вас нет доступа к админке.")
+        return
+
+    set_tournament_enabled(False)
+    await message.answer("Турниры выключены.", reply_markup=admin_markup())
+
+
+@router.callback_query(F.data.in_({"admin_tournament_on", "admin_tournament_off", "admin_status"}))
+async def admin_callbacks(callback: CallbackQuery) -> None:
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет доступа.", show_alert=True)
+        return
+
+    if callback.data == "admin_tournament_on":
+        set_tournament_enabled(True)
+        await callback.answer("Турниры включены.")
+    elif callback.data == "admin_tournament_off":
+        set_tournament_enabled(False)
+        await callback.answer("Турниры выключены.")
+    else:
+        await callback.answer()
+
+    status = "включены" if is_tournament_enabled() else "выключены"
+    await callback.message.edit_text(
+        f"Админка\n\nТурниры сейчас: <b>{status}</b>",
+        reply_markup=admin_markup(),
+    )
+
+
 @lru_cache(maxsize=1)
 def build_form_steps() -> dict[str, FormStep]:
     return {
@@ -235,7 +360,7 @@ def build_form_steps() -> dict[str, FormStep]:
             field="poem",
             prompt="Отправьте текст одного произведения.",
             validate=lambda value: len(value) >= 10,
-            normalize=normalize_text_input,
+            normalize=normalize_multiline_text,
             error="Текст слишком короткий. Отправьте, пожалуйста, полное произведение.",
             empty_error="Отправьте текст стихотворения обычным сообщением.",
             next_state=PoemForm.author.state,
@@ -295,7 +420,7 @@ def build_form_steps() -> dict[str, FormStep]:
                 "Важно, чтобы их объем был не более одного сообщения."
             ),
             validate=lambda value: len(value) >= 10,
-            normalize=lambda value: value.strip(),
+            normalize=normalize_multiline_text,
             error="Текст слишком короткий. Отправьте, пожалуйста, одно или несколько произведений одним сообщением.",
             empty_error="Отправьте произведения обычным сообщением.",
             next_state=TournamentForm.preview.state,
@@ -343,6 +468,11 @@ async def suggest_poem(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "apply_tournament")
 async def apply_tournament(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_tournament_enabled():
+        await callback.answer("Прием заявок на турнир сейчас закрыт.", show_alert=True)
+        await callback.message.edit_text("Главное меню", reply_markup=menu_markup())
+        return
+
     await state.clear()
     await state.set_state(TournamentForm.consent)
     await callback.message.edit_text(
