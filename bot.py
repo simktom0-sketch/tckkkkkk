@@ -21,7 +21,9 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    KeyboardButton,
     Message,
+    ReplyKeyboardMarkup,
 )
 from dotenv import load_dotenv
 
@@ -46,6 +48,7 @@ DECORATION_LINE = "﹌" * 17
 TELEGRAM_URL_RE = re.compile(r"^(https?://)?(t\.me|telegram\.me)/[A-Za-z0-9_]{5,32}/?$")
 
 router = Router()
+BOT_VERSION = "2026-09-13-admin-tournaments-news"
 
 
 class PoemForm(StatesGroup):
@@ -135,6 +138,28 @@ def admin_markup() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text=status, callback_data="admin_status")],
         [InlineKeyboardButton(text=action_text, callback_data=action_callback)],
         [InlineKeyboardButton(text="В главное меню", callback_data="main_menu")],
+    )
+
+
+def admin_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="Турниры")]],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите раздел админки",
+    )
+
+
+def tournament_admin_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="Включить турнир"),
+                KeyboardButton(text="Выключить турнир"),
+            ],
+            [KeyboardButton(text="Админка")],
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Управление турнирами",
     )
 
 
@@ -291,12 +316,12 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext) -> None
 async def show_admin_panel(message: Message) -> None:
     status = "включены" if is_tournament_enabled() else "выключены"
     await message.answer(
-        f"Админка\n\nТурниры сейчас: <b>{status}</b>",
-        reply_markup=admin_markup(),
+        f"Админка\n\nТурниры сейчас: <b>{status}</b>\n\nВыберите раздел:",
+        reply_markup=admin_keyboard(),
     )
 
 
-@router.message(F.text == "/admin")
+@router.message(F.text.in_({"/admin", "Админка"}))
 async def admin_command(message: Message) -> None:
     if message.chat.type != "private":
         return
@@ -307,7 +332,30 @@ async def admin_command(message: Message) -> None:
     await show_admin_panel(message)
 
 
-@router.message(F.text == "/tournament_on")
+@router.message(F.text == "/version")
+async def version_command(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+
+    await message.answer(f"Версия бота: <code>{BOT_VERSION}</code>")
+
+
+@router.message(F.text == "Турниры")
+async def tournament_admin_section(message: Message) -> None:
+    if message.chat.type != "private":
+        return
+    if not is_admin(message.from_user.id):
+        await message.answer("У вас нет доступа к админке.")
+        return
+
+    status = "включены" if is_tournament_enabled() else "выключены"
+    await message.answer(
+        f"Управление турнирами\n\nТурниры сейчас: <b>{status}</b>",
+        reply_markup=tournament_admin_keyboard(),
+    )
+
+
+@router.message(F.text.in_({"/tournament_on", "Включить турнир"}))
 async def tournament_on_command(message: Message) -> None:
     if message.chat.type != "private":
         return
@@ -316,10 +364,10 @@ async def tournament_on_command(message: Message) -> None:
         return
 
     set_tournament_enabled(True)
-    await message.answer("Турниры включены.", reply_markup=admin_markup())
+    await message.answer("Турнир включен. Кнопка заявки появится в главном меню.", reply_markup=tournament_admin_keyboard())
 
 
-@router.message(F.text == "/tournament_off")
+@router.message(F.text.in_({"/tournament_off", "Выключить турнир"}))
 async def tournament_off_command(message: Message) -> None:
     if message.chat.type != "private":
         return
@@ -328,7 +376,7 @@ async def tournament_off_command(message: Message) -> None:
         return
 
     set_tournament_enabled(False)
-    await message.answer("Турниры выключены.", reply_markup=admin_markup())
+    await message.answer("Турнир выключен. Кнопка заявки скрыта из главного меню.", reply_markup=tournament_admin_keyboard())
 
 
 @router.callback_query(F.data.in_({"admin_tournament_on", "admin_tournament_off", "admin_status"}))
@@ -628,6 +676,7 @@ async def main() -> None:
         raise RuntimeError("BOT_TOKEN is not set")
 
     logging.basicConfig(level=logging.INFO)
+    logging.info("Starting bot version %s", BOT_VERSION)
     bot = Bot(
         token=BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
